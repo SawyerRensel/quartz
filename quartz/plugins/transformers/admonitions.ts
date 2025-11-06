@@ -1,7 +1,9 @@
 import { QuartzTransformerPlugin } from "../types"
-import { Root, Blockquote, Paragraph } from "mdast"
+import { Root, Blockquote, Paragraph, BlockContent, DefinitionContent, RootContent } from "mdast"
 import { visit } from "unist-util-visit"
 import { fromMarkdown } from "mdast-util-from-markdown"
+import { gfm } from "micromark-extension-gfm"
+import { gfmFromMarkdown } from "mdast-util-gfm"
 
 export interface Options {
   // Enable rendering of markdown admonition blocks
@@ -115,16 +117,19 @@ export const Admonitions: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
                 const calloutDirective = `[!${parsed.type}]${collapseChar}${titleText ? " " + titleText : ""}`
 
                 // Convert body markdown to AST nodes
-                // We need to parse the body as markdown so links, formatting, etc. work
-                let bodyNodes: Paragraph[] = []
+                // We need to parse the body as markdown so ALL markdown syntax works
+                // This includes: headings, lists, checkboxes, code blocks, tables, etc.
+                let bodyNodes: RootContent[] = []
                 if (parsed.body) {
                   try {
-                    // Parse the body as markdown
-                    const bodyAst = fromMarkdown(parsed.body)
-                    // Extract the children (should be block content)
-                    bodyNodes = bodyAst.children.filter(
-                      (child): child is Paragraph => child.type === "paragraph",
-                    )
+                    // Parse the body as markdown with GFM support (includes task lists/checkboxes)
+                    const bodyAst = fromMarkdown(parsed.body, {
+                      extensions: [gfm()],
+                      mdastExtensions: [gfmFromMarkdown()],
+                    })
+                    // Extract ALL children (not just paragraphs!)
+                    // This includes headings, lists, code blocks, checkboxes, etc.
+                    bodyNodes = bodyAst.children
                   } catch (e) {
                     // If parsing fails, fall back to plain text
                     bodyNodes = [
@@ -153,7 +158,25 @@ export const Admonitions: QuartzTransformerPlugin<Partial<Options>> = (userOpts)
                 }
 
                 // Combine title and body
-                const children = [titleParagraph, ...bodyNodes]
+                // Filter to only include valid blockquote children
+                const validChildren = bodyNodes.filter(
+                  (node): node is BlockContent | DefinitionContent =>
+                    node.type === "paragraph" ||
+                    node.type === "heading" ||
+                    node.type === "list" ||
+                    node.type === "code" ||
+                    node.type === "blockquote" ||
+                    node.type === "html" ||
+                    node.type === "table" ||
+                    node.type === "thematicBreak" ||
+                    node.type === "definition" ||
+                    node.type === "footnoteDefinition",
+                )
+
+                const children: Array<BlockContent | DefinitionContent> = [
+                  titleParagraph,
+                  ...validChildren,
+                ]
 
                 // Create a blockquote node
                 const blockquote: Blockquote = {
