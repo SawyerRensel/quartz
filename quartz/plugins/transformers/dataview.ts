@@ -477,7 +477,7 @@ export const DataviewTables: QuartzTransformerPlugin<Partial<Options>> = (userOp
 
   return {
     name: "DataviewTables",
-    markdownPlugins(_ctx) {
+    markdownPlugins() {
       if (!opts.enableDataview) return []
 
       // Collect metadata from all files
@@ -523,7 +523,9 @@ export const DataviewTables: QuartzTransformerPlugin<Partial<Options>> = (userOp
             visit(tree, "code", (node: Code, index, parent) => {
               if (node.lang === "dataview") {
                 const query = parseDataviewQuery(node.value)
-                if (!query) return
+                if (!query) {
+                  return
+                }
 
                 // Execute the query
                 const results = executeQuery(query, allFilesMetadata)
